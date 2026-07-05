@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,minimal-ui">
+<title>GLACIAL · LAITON ecosystem</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#a0a5b1;font-family:'IBM Plex Mono',monospace;cursor:default}
+canvas{display:block}
+#loader{position:fixed;top:0;left:0;width:100%;height:100%;z-index:20;display:flex;flex-direction:column;justify-content:center;align-items:center;background:#a0a5b1;transition:opacity .8s;pointer-events:none}
+#loader.h{opacity:0}
+#loader .hex{width:40px;height:40px;position:relative;margin-bottom:12px}
+#loader .hex::before{content:'';position:absolute;width:100%;height:100%;background:#1a1a1a;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(.8);opacity:.3}50%{transform:scale(1);opacity:.6}}
+#loader .l{font-size:9px;letter-spacing:5px;text-transform:uppercase;color:rgba(0,0,0,.2);margin-top:4px}
+#hud{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;text-align:center}
+#hud .t{font-size:8px;letter-spacing:5px;color:rgba(0,0,0,.12);text-transform:uppercase}
+#title{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;text-align:center}
+#title h1{font-size:10px;letter-spacing:12px;color:rgba(0,0,0,.12);text-transform:uppercase;font-weight:400}
+#music-btn{position:fixed;top:20px;right:20px;z-index:10;font-size:8px;color:rgba(0,0,0,.12);background:rgba(255,255,255,.15);border:1px solid rgba(0,0,0,.06);padding:5px 10px;cursor:pointer;letter-spacing:4px;text-transform:uppercase;transition:.3s;font-family:'IBM Plex Mono',monospace}
+#music-btn:hover{color:rgba(0,0,0,.3);border-color:rgba(0,0,0,.12);background:rgba(255,255,255,.25)}
+#fps{position:fixed;top:20px;left:20px;z-index:10;font-size:7px;color:rgba(0,0,0,.04);pointer-events:none}
+#eco{position:fixed;bottom:20px;right:20px;z-index:10;font-size:6px;color:rgba(0,0,0,.04);letter-spacing:4px;text-transform:uppercase;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="loader"><div class="hex"></div><div class="l">GLACIAL</div></div>
+<div id="title"><h1>⬡ GLACIAL</h1></div>
+<button id="music-btn">♪</button>
+<div id="hud"><div class="t" id="zone-label">—</div></div>
+<div id="fps">—</div>
+<div id="eco">LAITON ECOSYSTEM</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Scene setup
+const scene=new THREE.Scene()
+scene.background=new THREE.Color(0xa0a5b1)
+scene.fog=new THREE.FogExp2(0xa0a5b1,.0012)
+
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,500)
+camera.position.set(12,4,16)
+
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false})
+renderer.setSize(innerWidth,innerHeight)
+renderer.setPixelRatio(Math.min(devicePixelRatio,2))
+renderer.shadowMap.enabled=true
+renderer.shadowMap.type=THREE.PCFSoftShadowMap
+renderer.toneMapping=THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure=1.2
+renderer.outputEncoding=THREE.sRGBEncoding
+document.body.prepend(renderer.domElement)
+
+// Lighting
+const amb=new THREE.AmbientLight(0x8899bb,.12)
+scene.add(amb)
+
+const hem=new THREE.HemisphereLight(0xbbddff,0x445566,.25)
+scene.add(hem)
+
+const sun=new THREE.DirectionalLight(0xffeedd,.8)
+sun.position.set(8,20,-4)
+sun.castShadow=true
+sun.shadow.mapSize.set(2048,2048)
+sun.shadow.camera.near=.1
+sun.shadow.camera.far=60
+sun.shadow.camera.left=-30
+sun.shadow.camera.right=30
+sun.shadow.camera.top=30
+sun.shadow.camera.bottom=-30
+scene.add(sun)
+
+const fill=new THREE.DirectionalLight(0x88bbff,.15)
+fill.position.set(-10,5,10)
+scene.add(fill)
+
+const rim=new THREE.DirectionalLight(0xffffff,.3)
+rim.position.set(-5,0,-15)
+scene.add(rim)
+
+// World group
+const world=new THREE.Group()
+scene.add(world)
+
+// Ground - icy plain
+const groundGeo=new THREE.PlaneGeometry(80,80,64,64)
+groundGeo.rotateX(-Math.PI/2)
+const vertices=groundGeo.attributes.position.array
+for(let i=0;i<vertices.length;i+=3){
+  const x=vertices[i],z=vertices[i+2]
+  vertices[i+1]=(Math.sin(x*.15)*Math.cos(z*.18)*.08+Math.sin(x*.3+z*.2)*.04)
+}
+groundGeo.computeVertexNormals()
+const groundMat=new THREE.MeshStandardMaterial({
+  color:0xc8d0e0,
+  roughness:.7,
+  metalness:.05,
+  flatShading:false
+})
+const ground=new THREE.Mesh(groundGeo,groundMat)
+ground.receiveShadow=true
+ground.position.y=-.5
+world.add(ground)
+
+// Ice surface (translucent layer)
+const iceGeo=new THREE.PlaneGeometry(40,40,32,32)
+iceGeo.rotateX(-Math.PI/2)
+const iceVerts=iceGeo.attributes.position.array
+for(let i=0;i<iceVerts.length;i+=3){
+  iceVerts[i+1]=Math.sin(iceVerts[i]*.2+iceVerts[i+2]*.25)*.15-.3
+}
+iceGeo.computeVertexNormals()
+const iceMat=new THREE.MeshPhysicalMaterial({
+  color:0x88bbee,
+  roughness:.2,
+  metalness:0,
+  transparent:true,
+  opacity:.25,
+  envMapIntensity:.5,
+  clearcoat:.1,
+  side:THREE.DoubleSide
+})
+const iceMesh=new THREE.Mesh(iceGeo,iceMat)
+iceMesh.position.y=-.35
+world.add(iceMesh)
+
+// Create icebergs
+function createIceberg(x,z,s,h,color){
+  const geo=new THREE.IcosahedronGeometry(s*.8,2)
+  const pos=geo.attributes.position.array
+  for(let i=0;i<pos.length;i+=3){
+    const n=Math.sin(pos[i]*2.5+pos[i+1]*3.1+pos[i+2]*1.8)*.25
+          +Math.sin(pos[i]*5.3+pos[i+2]*4.7)*.12
+    pos[i]*=1+n
+    pos[i+1]*=1+n
+    pos[i+2]*=1+n
+  }
+  geo.computeVertexNormals()
+  const mat=new THREE.MeshPhysicalMaterial({
+    color:color||0xbbd4ee,
+    roughness:.15,
+    metalness:0,
+    transparent:true,
+    opacity:.85,
+    clearcoat:.2,
+    envMapIntensity:1,
+    side:THREE.DoubleSide
+  })
+  const mesh=new THREE.Mesh(geo,mat)
+  mesh.position.set(x,h*.3,z)
+  mesh.scale.y=h
+  mesh.castShadow=true
+  mesh.receiveShadow=true
+  return mesh
+}
+
+const icebergs=[
+  createIceberg(-6,5,2.5,2.8,0xccddf5),
+  createIceberg(5,-4,2,2.2,0xbbd0ee),
+  createIceberg(-4,-6,1.8,1.8,0xddccff),
+  createIceberg(7,3,1.5,1.5,0xccddff),
+  createIceberg(-8,-3,2.2,2.4,0xbbccf0),
+  createIceberg(0,-8,1.2,1.2,0xccddff),
+  createIceberg(9,-6,1.8,2,0xbbd4ee),
+]
+icebergs.forEach(b=>world.add(b))
+
+// Ice spire (tall thin crystal)
+function createSpire(x,z,h,s){
+  const geo=new THREE.CylinderGeometry(.05,1.5*s,h,6,1)
+  const pos=geo.attributes.position.array
+  for(let i=0;i<pos.length;i+=3){
+    const y=pos[i+1]/h
+    pos[i]*=(1-y*.6)
+    pos[i+2]*=(1-y*.6)
+    pos[i]+=Math.sin(pos[i+2]*3+y*5)*.15
+  }
+  geo.computeVertexNormals()
+  const mat=new THREE.MeshPhysicalMaterial({
+    color:0xccddff,
+    roughness:.1,
+    metalness:0,
+    transparent:true,
+    opacity:.6,
+    clearcoat:.3,
+    side:THREE.DoubleSide
+  })
+  const mesh=new THREE.Mesh(geo,mat)
+  mesh.position.set(x,0,z)
+  mesh.castShadow=true
+  return mesh
+}
+
+const spires=[]
+for(let i=0;i<30;i++){
+  const angle=Math.random()*Math.PI*2
+  const r=3+Math.random()*10
+  const x=Math.cos(angle)*r
+  const z=Math.sin(angle)*r
+  if(Math.abs(x)<2&&Math.abs(z)<2)continue
+  const h=1+Math.random()*4
+  spires.push(createSpire(x,z,h,.3+Math.random()*.4))
+}
+spires.forEach(s=>world.add(s))
+
+// Aurora (northern lights)
+const auroraParticles=new Float32Array(2000*3)
+const auroraColors=new Float32Array(2000*3)
+const auroraSizes=new Float32Array(2000)
+for(let i=0;i<2000;i++){
+  const t=Math.random()*Math.PI*2
+  const r=15+Math.random()*25
+  auroraParticles[i*3]=Math.cos(t)*r*(.3+Math.random()*.7)
+  auroraParticles[i*3+1]=8+Math.random()*20
+  auroraParticles[i*3+2]=Math.sin(t)*r*(.3+Math.random()*.7)-10
+  const g=.3+Math.random()*.4
+  auroraColors[i*3]=.1+Math.random()*.15
+  auroraColors[i*3+1]=g
+  auroraColors[i*3+2]=.5+Math.random()*.5
+  auroraSizes[i]=.3+Math.random()*1.2
+}
+const aGeo=new THREE.BufferGeometry()
+aGeo.setAttribute('position',new THREE.BufferAttribute(auroraParticles,3))
+aGeo.setAttribute('color',new THREE.BufferAttribute(auroraColors,3))
+aGeo.setAttribute('size',new THREE.BufferAttribute(auroraSizes,1))
+const aMat=new THREE.PointsMaterial({
+  size:.15,
+  transparent:true,
+  opacity:.15,
+  blending:THREE.AdditiveBlending,
+  vertexColors:true,
+  depthWrite:false,
+  sizeAttenuation:true
+})
+const aurora=new THREE.Points(aGeo,aMat)
+aurora.position.set(0,2,-5)
+scene.add(aurora)
+
+// Snowflakes
+const snowCount=5000
+const sGeo=new THREE.BufferGeometry()
+const sPos=new Float32Array(snowCount*3)
+const sVel=[]
+for(let i=0;i<snowCount;i++){
+  sPos[i*3]=(Math.random()-.5)*60
+  sPos[i*3+1]=Math.random()*25
+  sPos[i*3+2]=(Math.random()-.5)*60-5
+  sVel.push({x:(Math.random()-.5)*.003,y:-.01-Math.random()*.02,z:(Math.random()-.5)*.003})
+}
+sGeo.setAttribute('position',new THREE.BufferAttribute(sPos,3))
+const sMat=new THREE.PointsMaterial({
+  color:0xffffff,
+  size:.06,
+  transparent:true,
+  opacity:.4,
+  blending:THREE.AdditiveBlending,
+  depthWrite:false,
+  sizeAttenuation:true
+})
+const snow=new THREE.Points(sGeo,sMat)
+scene.add(snow)
+
+// Floating ice crystals
+const crystalCount=200
+const cGeo=new THREE.BufferGeometry()
+const cPos=new Float32Array(crystalCount*3)
+const cData=[]
+for(let i=0;i<crystalCount;i++){
+  const angle=Math.random()*Math.PI*2
+  const r=2+Math.random()*14
+  cPos[i*3]=Math.cos(angle)*r
+  cPos[i*3+1]=.5+Math.random()*6
+  cPos[i*3+2]=Math.sin(angle)*r-3
+  cData.push({vx:(Math.random()-.5)*.002,vy:(Math.random()-.5)*.002,vz:(Math.random()-.5)*.002,phase:Math.random()*Math.PI*2})
+}
+cGeo.setAttribute('position',new THREE.BufferAttribute(cPos,3))
+const cMat=new THREE.PointsMaterial({
+  color:0x88ccff,
+  size:.04,
+  transparent:true,
+  opacity:.2,
+  blending:THREE.AdditiveBlending,
+  sizeAttenuation:true
+})
+const crystals=new THREE.Points(cGeo,cMat)
+scene.add(crystals)
+
+// Simple box igloo structure (geometric)
+const iglooGroup=new THREE.Group()
+const iglooMat=new THREE.MeshPhysicalMaterial({
+  color:0xdde6f5,
+  roughness:.25,
+  metalness:0,
+  transparent:true,
+  opacity:.7,
+  clearcoat:.15,
+  side:THREE.DoubleSide
+})
+for(let ring=0;ring<6;ring++){
+  const segments=Math.max(8-ring,4)
+  const radius=2.8-ring*.38
+  const y=ring*.45
+  for(let s=0;s<segments;s++){
+    const angle=(s/segments)*Math.PI*2
+    const nextAngle=((s+1)/segments)*Math.PI*2
+    const w=radius*Math.sin(Math.PI/segments)*.8
+    const h=.35+Math.sin(ring/5*Math.PI)*.1
+    const box=new THREE.Mesh(new THREE.BoxGeometry(w,h,w*.6),iglooMat)
+    box.position.set(
+      Math.cos(angle+.05)*radius,
+      y+.2,
+      Math.sin(angle+.05)*radius
+    )
+    box.lookAt(0,y+.2,0)
+    box.castShadow=true
+    iglooGroup.add(box)
+  }
+}
+// Dome top
+const domeMat=new THREE.MeshPhysicalMaterial({
+  color:0xdde6f5,
+  roughness:.2,
+  metalness:0,
+  transparent:true,
+  opacity:.8,
+  clearcoat:.2,
+  side:THREE.DoubleSide
+})
+const dome=new THREE.Mesh(new THREE.SphereGeometry(.8,12,8),domeMat)
+dome.position.set(0,2.8,0)
+dome.scale.y=.5
+iglooGroup.add(dome)
+// Entrance
+const archMat=new THREE.MeshPhysicalMaterial({
+  color:0xa0a5b1,
+  roughness:.5,
+  metalness:0,
+  side:THREE.DoubleSide
+})
+const arch=new THREE.Mesh(new THREE.TorusGeometry(.6,.12,6,8),archMat)
+arch.position.set(2.2,.3,0)
+arch.rotation.z=Math.PI/2
+iglooGroup.add(arch)
+
+iglooGroup.position.set(0,-.2,1)
+iglooGroup.scale.set(.8,.8,.8)
+world.add(iglooGroup)
+
+// Music
+const audio=new Audio('https://raw.githubusercontent.com/Laiton-Group/hub/main/shiveria.mp3')
+audio.loop=true
+audio.volume=.2
+let musicOn=false
+document.getElementById('music-btn').onclick=()=>{
+  musicOn=!musicOn
+  if(musicOn){audio.play().catch(()=>{});document.getElementById('music-btn').textContent='♫'}
+  else{audio.pause();document.getElementById('music-btn').textContent='♪'}
+}
+
+// Loader
+const loader=document.getElementById('loader')
+setTimeout(()=>loader.classList.add('h'),1200)
+
+// Camera orbit
+let angle=0
+const radius=14
+
+// HUD
+const zones=['FROZEN WASTES','ICE CRYSTAL FIELD','GLACIAL PEAKS','FROZEN LAKE','ICE CAVE']
+let zi=0
+const zl=document.getElementById('zone-label')
+zl.textContent=zones[0]
+
+// Auto-rotate camera
+let mx=0,my=0
+document.addEventListener('mousemove',e=>{
+  mx=(e.clientX/innerWidth)*2-1
+  my=-(e.clientY/innerHeight)*2+1
+})
+
+// FPS
+let fc=0,lt=performance.now()
+const fpsEl=document.getElementById('fps')
+
+function animate(){
+  requestAnimationFrame(animate)
+  
+  const time=Date.now()*.001
+  
+  // Camera
+  angle+=.0015
+  camera.position.x=Math.cos(angle+mx*.3)*radius+mx*.8
+  camera.position.z=Math.sin(angle+mx*.3)*radius+mx*.8
+  camera.position.y=3+my*.5+Math.sin(time*.05)*.2
+  camera.lookAt(0,.5,0)
+  
+  // Snow
+  const sp=snow.geometry.attributes.position.array
+  for(let i=0;i<snowCount;i++){
+    sp[i*3]+=sVel[i].x
+    sp[i*3+1]+=sVel[i].y
+    sp[i*3+2]+=sVel[i].z
+    if(sp[i*3+1]<-2){sp[i*3]=(Math.random()-.5)*60;sp[i*3+1]=25;sp[i*3+2]=(Math.random()-.5)*60-5}
+  }
+  snow.geometry.attributes.position.needsUpdate=true
+  
+  // Aurora
+  const ap=aurora.geometry.attributes.position.array
+  for(let i=0;i<2000;i++){
+    ap[i*3+1]+=Math.sin(time*.1+i)*.001
+  }
+  aurora.geometry.attributes.position.needsUpdate=true
+  aurora.position.y=Math.sin(time*.03)*1
+  
+  // Crystals
+  const cp=crystals.geometry.attributes.position.array
+  for(let i=0;i<crystalCount;i++){
+    cp[i*3]+=cData[i].vx+Math.sin(time*.5+cData[i].phase)*.001
+    cp[i*3+1]+=cData[i].vy+Math.sin(time*.7+cData[i].phase)*.001
+    cp[i*3+2]+=cData[i].vz+Math.sin(time*.6+cData[i].phase)*.001
+    const r=Math.sqrt(cp[i*3]**2+cp[i*3+2]**2)
+    if(r>18||r<1||cp[i*3+1]>8||cp[i*3+1]<0){
+      const a=Math.random()*Math.PI*2
+      const rd=2+Math.random()*14
+      cp[i*3]=Math.cos(a)*rd
+      cp[i*3+1]=.5+Math.random()*6
+      cp[i*3+2]=Math.sin(a)*rd-3
+    }
+  }
+  crystals.geometry.attributes.position.needsUpdate=true
+  
+  // FPS
+  fc++
+  const now=performance.now()
+  if(now-lt>=1000){
+    fpsEl.textContent=fc+' FPS'
+    fc=0
+    lt=now
+  }
+  
+  renderer.render(scene,camera)
+}
+animate()
+
+// Resize
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth,innerHeight)
+})
+</script>
+</body>
+</html>
